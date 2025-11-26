@@ -1,37 +1,120 @@
-#include "lmc.h"
-#include "lmc_asm.h"
-#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-/** Initialises the LMC structure and sets components like accumulator, program counter, instruction 
- * register, halt flag and the variables responsible for hanfling I/O to default values (i.e 0)
- */
+#define MEMORY_SIZE 100
 
-void init_lmc(LMC* lmc){
-	memset(lmc->memory, 0, sizeof(lmc->memory));
-	lmc->accumulator = 0;
-	lmc->pc = 0;
-	lmc->ir = 0;
-	lmc->halted = 0;
-	lmc->input_count = 0;
-	lmc->input_index = 0;
-	lmc->output_count = 0;
-	memset(lmc->input_buffer, 0, sizeof(lmc->input_buffer));
-	memset(lmc->output_buffer, 0, sizeof(lmc->output_buffer));
+int memory[MEMORY_SIZE];
+int accumulator = 0;
+int programCounter = 0;
+int instructionRegister = 0;
+int opcode = 0;
+int address = 0;
+
+void loadProgram();
+void execute();
+void fetch();
+void decode();
+void executeInstruction();
+
+int main() {
+    loadProgram();
+    execute();
+    return 0;
 }
 
-void reset_lmc(LMC* lmc) {
-	lmc->accumulator = 0;
-	lmc->pc = 0;
-	lmc->ir = 0;
-	lmc->halted = 0;
-	lmc->input_index = 0;
-	lmc->output_count = 0;
+void loadProgram() {
+    printf("Enter program instructions (enter -1 to stop):\n");
+    int instruction;
+    int i = 0;
+    
+    while (i < MEMORY_SIZE) {
+        printf("%02d ? ", i);
+        scanf("%d", &instruction);
+        
+        if (instruction == -1) {
+            break;
+        }
+        
+        if (instruction < 0 || instruction > 999) {
+            printf("Invalid instruction! Must be between 000 and 999.\n");
+            continue;
+        }
+        
+        memory[i] = instruction;
+        i++;
+    }
 }
 
-void load_program(LMC*lmc, int* program, int size) {
-	if (size>MEMORY_SIZE){
-		size = MEMORY_SIZE;
-	}
-	asm_memcpy_fast(lmc->memory, program, size);
+void execute() {
+    while (1) {
+        fetch();
+        decode();
+        executeInstruction();
+        
+        if (opcode == 0) { // HLT instruction
+            break;
+        }
+    }
 }
 
+void fetch() {
+    instructionRegister = memory[programCounter];
+    programCounter++;
+}
+
+void decode() {
+    opcode = instructionRegister / 100;
+    address = instructionRegister % 100;
+}
+
+void executeInstruction() {
+    int input;
+    
+    switch (opcode) {
+        case 1: // ADD
+            accumulator += memory[address];
+            break;
+        case 2: // SUB
+            accumulator -= memory[address];
+            break;
+        case 3: // STA
+            memory[address] = accumulator;
+            break;
+        case 5: // LDA
+            accumulator = memory[address];
+            break;
+        case 6: // BRA
+            programCounter = address;
+            break;
+        case 7: // BRZ
+            if (accumulator == 0) {
+                programCounter = address;
+            }
+            break;
+        case 8: // BRP
+            if (accumulator >= 0) {
+                programCounter = address;
+            }
+            break;
+        case 9: // I/O
+            if (address == 1) { // INP
+                printf("Input: ");
+                scanf("%d", &input);
+                accumulator = input;
+            } else if (address == 2) { // OUT
+                printf("Output: %d\n", accumulator);
+            }
+            break;
+        case 0: // HLT
+            printf("Program halted\n");
+            break;
+        default:
+            printf("Unknown instruction! Program halted\n");
+            opcode = 0; // Force halt
+            break;
+    }
+    
+    // Ensure accumulator stays within 3-digit range
+    if (accumulator > 999) accumulator = 999;
+    if (accumulator < -999) accumulator = -999;
+}
